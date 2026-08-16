@@ -1,0 +1,91 @@
+# Render Blueprint for LifeCloset's backend + pattern-service, tuned to
+# run entirely on Render's FREE tier — no credit card, no "starter"
+# plans anywhere in this file. The Next.js frontend stays on Vercel
+# (unaffected by this file); Postgres lives on Neon's free tier instead
+# of Render's (see the note at the bottom for why). Full walkthrough in
+# DEPLOYMENT_RENDER.md.
+#
+# Deploy: render.com → New → Blueprint → point at this repo → Apply.
+# Fields marked `sync: false` are intentionally left for you to fill in
+# by hand in the Render dashboard after the first apply (secrets, and a
+# couple of values that depend on resources this blueprint itself creates).
+#
+# Free-tier trade-offs, upfront and honest:
+#   - Both services below spin down after ~15 minutes with no traffic and
+#     take 30-60s to wake back up on the next request. That's the deal
+#     Render makes for $0 — it's normal, not a bug in this config.
+#   - Free web services have no persistent disk, so STORAGE_PROVIDER=local
+#     (the default — see backend/.env.example) means uploaded images are
+#     lost whenever the service restarts or redeploys. Completely fine
+#     for a portfolio/demo deployment; swap to a free object-storage
+#     provider later if you need uploads to survive restarts (see
+#     DEPLOYMENT_RENDER.md's "optional upgrades" section).
+
+services:
+  # Python pattern-tiling microservice. Render's free tier only offers
+  # public "web" services — there's no free private/internal-only
+  # service ("pserv"), so this can't be hidden from the internet the way
+  # the old paid setup had it. Instead it's protected by a shared-secret
+  # header (PATTERN_SERVICE_API_KEY below) that only lifecloset-api
+  # knows — see pattern-service/app/main.py.
+  - type: web
+    name: lifecloset-pattern-service
+    runtime: docker
+    repo: "" # fill in if this is a separate repo; leave blank if same repo as this file
+    dockerfilePath: ./pattern-service/Dockerfile
+    dockerContext: ./pattern-service
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      - key: PATTERN_SERVICE_API_KEY
+        generateValue: true
+
+  # Go API.
+  - type: web
+    name: lifecloset-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      # --- Database: Neon (free, no card, doesn't expire) ---
+      # Paste the connection string from your Neon project here — see
+      # DEPLOYMENT_RENDER.md §1. Must end with ?sslmode=require.
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: LOG_LEVEL
+        value: info
+      - key: ALLOWED_ORIGINS
+        sync: false # set to your Vercel URL — see DEPLOYMENT_RENDER.md §4
+      # --- Storage: local disk (free, zero setup, ephemeral — see note above) ---
+      - key: STORAGE_PROVIDER
+        value: local
+      - key: STORAGE_LOCAL_DIR
+        value: /data/uploads
+      - key: STORAGE_BASE_URL
+        sync: false # set to https://lifecloset-api.onrender.com/uploads once the service has a URL
+      # --- Pattern service ---
+      - key: PATTERN_SERVICE_URL
+        sync: false # fill in with lifecloset-pattern-service's public URL — see DEPLOYMENT_RENDER.md §3
+      - key: PATTERN_SERVICE_USE_ID_TOKEN
+        value: "false" # no GCP identity off Cloud Run; the API key above is the access control instead
+      - key: PATTERN_SERVICE_API_KEY
+        sync: false # copy the value Render generated for the pattern service's PATTERN_SERVICE_API_KEY
+      # --- Bear (companion chat) — optional, free Gemini API key ---
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: COMPANION_MODEL
+        value: gemini-2.5-flash
+
+# Why no `databases:` block: Render's own free Postgres plan auto-expires
+# 30 days after creation (Render deletes it), which is a bad fit for
+# anything you want to keep showing off in a portfolio. Neon's free tier
+# (https://neon.tech) doesn't expire, needs no card, and speaks plain
+# Postgres — `database.RunMigrations()` in cmd/api/main.go runs against
+# it exactly the same way it would against Render's own database. See
+# DEPLOYMENT_RENDER.md §1 for the two-minute setup.

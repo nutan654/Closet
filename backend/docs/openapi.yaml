@@ -1,0 +1,315 @@
+openapi: 3.0.3
+info:
+  title: Closet API
+  description: >
+    Backend for Closet — a virtual wardrobe/dressing-doll app.
+    This file is hand-authored covering the core surface; the handler
+    files under internal/handlers/ carry swaggo (@Summary/@Router/...)
+    annotations so `make swagger` can regenerate a fuller spec from the
+    actual code once swag is installed (see Makefile).
+  version: "1.0"
+servers:
+  - url: /api/v1
+security:
+  - BearerAuth: []
+paths:
+  /auth/signup:
+    post:
+      tags: [auth]
+      summary: Create an account
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SignupRequest" }
+      responses:
+        "201": { description: Account created, content: { application/json: { schema: { $ref: "#/components/schemas/AuthEnvelope" } } } }
+        "409": { description: Email already registered }
+        "400": { description: Validation error }
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Sign in
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200": { description: Signed in, content: { application/json: { schema: { $ref: "#/components/schemas/AuthEnvelope" } } } }
+        "401": { description: Invalid credentials }
+  /auth/refresh:
+    post:
+      tags: [auth]
+      summary: Exchange a refresh token for a new access/refresh pair (rotates the token)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RefreshRequest" }
+      responses:
+        "200": { description: New token pair issued }
+        "401": { description: Refresh token invalid, expired, revoked, or already used }
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: Revoke a refresh token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RefreshRequest" }
+      responses:
+        "200": { description: Signed out (idempotent) }
+  /auth/me:
+    get:
+      tags: [auth]
+      summary: Get the current authenticated user
+      responses:
+        "200": { description: Current user }
+        "401": { description: Missing/invalid access token }
+  /me/equipped:
+    put:
+      tags: [users]
+      summary: Equip or unequip an item on the doll
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EquippedRequest" }
+      responses:
+        "200": { description: Updated equipped map }
+  /items:
+    post:
+      tags: [items]
+      summary: Add a wardrobe item
+      description: >
+        Accepts either a JSON body (no image) or multipart/form-data with
+        the same fields plus an optional `image` file part. Uploaded
+        images are validated (size, real content-sniffed MIME type — the
+        Content-Type header sent by the client is never trusted) and
+        processed into a normalized original plus a thumbnail; see
+        internal/storage and internal/imageproc for the implementation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ItemRequest" }
+          multipart/form-data:
+            schema:
+              allOf:
+                - $ref: "#/components/schemas/ItemRequest"
+                - type: object
+                  properties:
+                    image:
+                      type: string
+                      format: binary
+                      description: >
+                        Clothing photo. Accepted formats: image/jpeg,
+                        image/png, image/webp (detected from file content,
+                        not the filename or declared Content-Type).
+                        Maximum size is STORAGE_MAX_FILE_SIZE_MB (10MB by
+                        default).
+      responses:
+        "201":
+          description: Item created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/ItemResponse" }
+        "400":
+          description: Validation error, or the uploaded file could not be read as a valid image (code ERR_INVALID_IMAGE)
+        "401": { description: Missing or invalid access token }
+        "413": { description: Uploaded image exceeds STORAGE_MAX_FILE_SIZE_MB (code ERR_FILE_TOO_LARGE) }
+        "415": { description: Uploaded file is not image/jpeg, image/png, or image/webp (code ERR_UNSUPPORTED_FILE_TYPE) }
+    get:
+      tags: [items]
+      summary: List the current user's items (paginated)
+      parameters:
+        - { name: category, in: query, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: perPage, in: query, schema: { type: integer, default: 20 } }
+      responses:
+        "200": { description: Page of items }
+  /items/{id}:
+    patch:
+      tags: [items]
+      summary: Update fields on an item you own
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ItemPatchRequest" }
+      responses:
+        "200": { description: Updated }
+        "403": { description: You don't own this item }
+        "404": { description: Not found }
+    delete:
+      tags: [items]
+      summary: Delete an item you own
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: Removed }
+        "403": { description: You don't own this item }
+  /items/{id}/wear:
+    post:
+      tags: [items]
+      summary: Log that an item was worn
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: Logged }
+  /history:
+    get:
+      tags: [items]
+      summary: Recent wear history for the current user
+      responses:
+        "200": { description: Wear log entries }
+  /outfits:
+    post:
+      tags: [outfits]
+      summary: Save an outfit
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OutfitRequest" }
+      responses:
+        "201": { description: Outfit saved }
+    get:
+      tags: [outfits]
+      summary: List the current user's saved outfits
+      responses:
+        "200": { description: Outfits }
+  /outfits/{id}:
+    get:
+      tags: [outfits]
+      summary: Get a single outfit
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: Outfit }
+        "403": { description: You don't own this outfit }
+    patch:
+      tags: [outfits]
+      summary: Update an outfit
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: Updated }
+    delete:
+      tags: [outfits]
+      summary: Delete an outfit
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: Removed }
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Envelope:
+      type: object
+      properties:
+        success: { type: boolean }
+        message: { type: string }
+        data: {}
+        error: { type: string }
+    SignupRequest:
+      type: object
+      required: [name, email, password]
+      properties:
+        name: { type: string }
+        email: { type: string, format: email }
+        password: { type: string, description: "min 8 chars, upper+lower+digit+special" }
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string }
+    AuthEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                user: { $ref: "#/components/schemas/User" }
+                accessToken: { type: string }
+                refreshToken: { type: string }
+                expiresIn: { type: integer, description: seconds }
+    User:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string }
+        avatar: { type: string, nullable: true }
+        equipped:
+          type: object
+          description: doll slot -> equipped item id (Phase 4.3 — the only way a client learns this without a separate GET /me/equipped)
+          additionalProperties: { type: string }
+        createdAt: { type: string, format: date-time }
+    EquippedRequest:
+      type: object
+      required: [slot]
+      properties:
+        slot: { type: string, example: tops }
+        itemId: { type: string, nullable: true, description: "omit/null to unequip" }
+    ItemRequest:
+      type: object
+      required: [category, name, color]
+      properties:
+        category: { type: string, enum: [tops, bottoms, dresses, outerwear, shoes, bags, accessories, skincare, makeup, haircare, fragrance, jewelry, supplements] }
+        name: { type: string }
+        brand: { type: string }
+        price: { type: number }
+        color: { type: string, example: "#FFD9BE" }
+        fit: { type: string }
+        cardStyle: { type: string }
+    ItemPatchRequest:
+      type: object
+      description: Same fields as ItemRequest, all optional — only provided fields are updated.
+    ItemResponse:
+      type: object
+      description: >
+        ItemRequest fields plus server-assigned metadata. Image fields are
+        omitted entirely when the item has no uploaded image.
+      properties:
+        id: { type: string }
+        category: { type: string }
+        name: { type: string }
+        brand: { type: string }
+        price: { type: number }
+        color: { type: string }
+        fit: { type: string }
+        cardStyle: { type: string }
+        imageUrl: { type: string, description: "Public URL of the (possibly resized) original image." }
+        thumbnailUrl: { type: string, description: "Public URL of the generated thumbnail (always JPEG)." }
+        imageMimeType: { type: string, example: "image/jpeg" }
+        imageFileSize: { type: integer, description: "Bytes." }
+        imageWidth: { type: integer }
+        imageHeight: { type: integer }
+        imageUploadedAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+    OutfitRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        emoji: { type: string }
+        itemIds: { type: array, items: { type: string } }

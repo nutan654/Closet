@@ -1,0 +1,69 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: closet
+      POSTGRES_PASSWORD: closet
+      POSTGRES_DB: closet
+    ports:
+      - "5432:5432"
+    volumes:
+      - closet_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U closet"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      pattern-service:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://closet:closet@postgres:5432/closet?sslmode=disable
+      ALLOWED_ORIGINS: http://localhost:3000
+      JWT_SECRET: dev-only-secret-change-in-production-123
+      PORT: 8080
+      LOG_LEVEL: debug
+      # Phase 3 storage — local provider, same defaults as .env.example.
+      # STORAGE_LOCAL_DIR is a container path backed by the named volume
+      # below, so uploaded images survive `docker compose restart`/`down`
+      # (as long as the volume itself isn't removed with `-v`).
+      STORAGE_PROVIDER: local
+      STORAGE_BUCKET: uploads
+      STORAGE_BASE_URL: http://localhost:8080/uploads
+      STORAGE_LOCAL_DIR: /data/uploads
+      STORAGE_MAX_FILE_SIZE_MB: 10
+      # Phase 5 — Python pattern microservice, reached over the compose
+      # network by service name (not localhost).
+      PATTERN_SERVICE_URL: http://pattern-service:8000
+      PATTERN_SERVICE_TIMEOUT: 15s
+    ports:
+      - "8080:8080"
+    volumes:
+      - closet_uploads:/data/uploads
+
+  # Phase 5 — Smart Garment Engine's pattern-processing sidecar. Pure
+  # Python/Pillow/numpy image work (seamless tiling, palette extraction);
+  # stateless, no database of its own. See pattern-service/app/main.py.
+  pattern-service:
+    build: ../pattern-service
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  closet_pgdata:
+  closet_uploads:

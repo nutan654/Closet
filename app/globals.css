@@ -1,0 +1,100 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;1,500&family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500;1,600&family=Poppins:wght@500;600&family=Inter:wght@400;500;600&family=DM+Sans:wght@500;600&display=swap');
+
+:root {
+  --font-title: 'Playfair Display', serif;
+  --font-heading: 'Cormorant Garamond', serif;
+  --font-button: 'Poppins', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --font-label: 'DM Sans', sans-serif;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  color: #5B3E4A;
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Step 4 — layered premium background: a soft radial glow, a gentle linear
+   wash top-to-bottom, and a barely-there noise texture so flat pastel
+   doesn't look like a flat png. Fixed so it doesn't repeat/tile on scroll. */
+body {
+  background-color: #FFFDFB;
+  background-image:
+    radial-gradient(600px 420px at 78% 8%, rgba(231, 222, 242, 0.55), transparent 60%),
+    radial-gradient(520px 380px at 10% 15%, rgba(246, 216, 224, 0.45), transparent 65%),
+    linear-gradient(180deg, #FFFDFB 0%, #FBF7FB 45%, #F8F3FF 100%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+  background-attachment: fixed, fixed, fixed, fixed;
+  background-size: auto, auto, auto, 120px 120px;
+}
+
+h1, h2, h3 {
+  font-family: var(--font-title);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.font-heading-serif {
+  font-family: var(--font-heading);
+}
+
+button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible {
+  outline: 2px solid #D9B979;
+  outline-offset: 2px;
+}
+
+::-webkit-scrollbar { display: none; }
+* { scrollbar-width: none; }
+
+@keyframes softFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.screen-fade {
+  animation: softFadeIn 0.4s ease-out;
+}
+
+@keyframes signSway {
+  0%, 100% { transform: rotate(-2.5deg); }
+  50% { transform: rotate(2.5deg); }
+}
+.sign-sway {
+  animation: signSway 2.6s ease-in-out infinite;
+  transform-origin: top center;
+}
+
+/* tiny drifting sparkles for hero panels — opt-in via .sparkle */
+@keyframes sparkleDrift {
+  0%, 100% { transform: translateY(0) scale(1); opacity: 0.5; }
+  50% { transform: translateY(-6px) scale(1.15); opacity: 0.9; }
+}
+.sparkle {
+  animation: sparkleDrift 3.4s ease-in-out infinite;
+}
+
+/* Step 23 — respect the OS-level "reduce motion" preference. This covers
+   the plain-CSS keyframe animations above (sparkle drift, sign sway,
+   screen fade-in); Framer Motion's own spring/tap/hover transitions read
+   this same preference automatically wherever a component wraps its
+   motion.* usage in `useReducedMotion()` — see components using
+   whileHover/whileTap/drag for the current per-component coverage. */
+@media (prefers-reduced-motion: reduce) {
+  .sparkle,
+  .sign-sway,
+  .screen-fade {
+    animation: none !important;
+  }
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
