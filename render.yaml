@@ -31,7 +31,6 @@ services:
   - type: web
     name: lifecloset-pattern-service
     runtime: docker
-    repo: "" # fill in if this is a separate repo; leave blank if same repo as this file
     dockerfilePath: ./pattern-service/Dockerfile
     dockerContext: ./pattern-service
     plan: free
