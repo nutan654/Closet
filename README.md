@@ -2,6 +2,10 @@
 
 A full-stack digital wardrobe application that combines interactive SVG rendering, real garment image processing, persistent wardrobe management, and personalized outfit tracking.
 
+
+- **Vercel:** https://closet-ruddy.vercel.app
+- **Render:** https://lifecloset-web.onrender.com
+
 ## Overview
 
 LifeCloset lets users digitize their wardrobe, customize a virtual dressing doll with their own clothing, process fabric images into reusable textures, save outfits, and maintain a persistent wear history.
